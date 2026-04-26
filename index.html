@@ -1,0 +1,843 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Control de Asistencia</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="https://unpkg.com/jsqr@1.4.0/dist/jsQR.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0f0f0f;
+    --surface: #1a1a1a;
+    --surface2: #222222;
+    --border: rgba(255,255,255,0.08);
+    --border2: rgba(255,255,255,0.15);
+    --text: #f0f0f0;
+    --text2: #888;
+    --text3: #555;
+    --accent: #00e5a0;
+    --accent2: #00b37a;
+    --danger: #ff4d4d;
+    --warn: #ffb340;
+    --info: #4d9eff;
+    --font: 'DM Sans', sans-serif;
+    --mono: 'DM Mono', monospace;
+    --radius: 10px;
+    --radius-lg: 16px;
+  }
+
+  body {
+    font-family: var(--font);
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    font-size: 14px;
+    line-height: 1.5;
+  }
+
+  /* LAYOUT */
+  .app { display: flex; height: 100vh; overflow: hidden; }
+
+  /* SIDEBAR */
+  .sidebar {
+    width: 220px;
+    flex-shrink: 0;
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    padding: 24px 0;
+  }
+  .logo {
+    padding: 0 20px 24px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 12px;
+  }
+  .logo-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--accent);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    font-family: var(--mono);
+  }
+  .logo-sub { font-size: 11px; color: var(--text3); margin-top: 2px; }
+
+  .nav-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 20px;
+    cursor: pointer;
+    color: var(--text2);
+    font-size: 13px;
+    font-weight: 400;
+    border-left: 2px solid transparent;
+    transition: all 0.15s;
+    user-select: none;
+  }
+  .nav-item:hover { color: var(--text); background: rgba(255,255,255,0.04); }
+  .nav-item.active { color: var(--accent); border-left-color: var(--accent); background: rgba(0,229,160,0.06); font-weight: 500; }
+  .nav-icon { font-size: 16px; width: 20px; text-align: center; }
+
+  .sidebar-footer {
+    margin-top: auto;
+    padding: 16px 20px;
+    border-top: 1px solid var(--border);
+    font-size: 11px;
+    color: var(--text3);
+  }
+
+  /* MAIN */
+  .main { flex: 1; overflow-y: auto; display: flex; flex-direction: column; }
+
+  .topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 28px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg);
+    position: sticky;
+    top: 0;
+    z-index: 10;
+  }
+  .topbar-title { font-size: 16px; font-weight: 500; }
+  .topbar-time { font-family: var(--mono); font-size: 13px; color: var(--text2); }
+
+  .content { padding: 24px 28px; flex: 1; }
+
+  /* PANELS */
+  .panel { display: none; }
+  .panel.active { display: block; }
+
+  /* METRICS */
+  .metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 24px; }
+  .metric {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px;
+  }
+  .metric-label { font-size: 11px; color: var(--text3); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 6px; }
+  .metric-value { font-size: 28px; font-weight: 300; font-family: var(--mono); color: var(--text); }
+  .metric-value.green { color: var(--accent); }
+  .metric-value.red { color: var(--danger); }
+  .metric-value.blue { color: var(--info); }
+
+  /* GRID */
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+
+  /* CARDS */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 20px;
+  }
+  .card-title {
+    font-size: 12px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text3);
+    margin-bottom: 16px;
+  }
+
+  /* SCANNER */
+  .scanner-wrap { position: relative; border-radius: var(--radius); overflow: hidden; background: #000; }
+  #preview { width: 100%; display: block; border-radius: var(--radius); }
+  .scanner-overlay {
+    position: absolute; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .scan-frame {
+    width: 160px; height: 160px;
+    border: 2px solid var(--accent);
+    border-radius: 8px;
+    box-shadow: 0 0 0 9999px rgba(0,0,0,0.45);
+    animation: pulse 2s ease-in-out infinite;
+  }
+  @keyframes pulse { 0%,100%{border-color:var(--accent);} 50%{border-color:var(--accent2);} }
+  .scan-line {
+    position: absolute;
+    width: 140px;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, var(--accent), transparent);
+    animation: scanline 2s ease-in-out infinite;
+  }
+  @keyframes scanline { 0%{top:calc(50% - 80px);} 100%{top:calc(50% + 80px);} }
+
+  .btn-scan {
+    width: 100%;
+    padding: 12px;
+    border-radius: var(--radius);
+    border: 1px solid var(--accent);
+    background: rgba(0,229,160,0.08);
+    color: var(--accent);
+    font-family: var(--font);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s;
+    margin-top: 12px;
+  }
+  .btn-scan:hover { background: rgba(0,229,160,0.16); }
+  .btn-scan.active { background: rgba(255,77,77,0.1); border-color: var(--danger); color: var(--danger); }
+
+  /* ENTRY CARD */
+  .entry-result {
+    border-radius: var(--radius);
+    padding: 16px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    animation: slideIn 0.3s ease;
+  }
+  @keyframes slideIn { from{transform:translateY(-8px);opacity:0;} to{transform:translateY(0);opacity:1;} }
+  .entry-avatar {
+    width: 44px; height: 44px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 500; font-size: 14px; flex-shrink: 0;
+  }
+  .entry-info { flex: 1; }
+  .entry-name { font-size: 15px; font-weight: 500; }
+  .entry-detail { font-size: 12px; color: var(--text2); margin-top: 2px; }
+  .entry-time { font-family: var(--mono); font-size: 13px; color: var(--text2); text-align: right; }
+
+  /* BADGES */
+  .badge {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 500;
+  }
+  .badge-green { background: rgba(0,229,160,0.12); color: var(--accent); }
+  .badge-red { background: rgba(255,77,77,0.12); color: var(--danger); }
+  .badge-amber { background: rgba(255,179,64,0.12); color: var(--warn); }
+  .badge-blue { background: rgba(77,158,255,0.12); color: var(--info); }
+  .dot { width: 6px; height: 6px; border-radius: 50%; display: inline-block; }
+  .dot-green { background: var(--accent); }
+  .dot-red { background: var(--danger); }
+  .dot-amber { background: var(--warn); }
+
+  /* TABLES */
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th {
+    text-align: left; padding: 8px 12px;
+    font-size: 11px; color: var(--text3);
+    font-weight: 500; text-transform: uppercase; letter-spacing: 0.06em;
+    border-bottom: 1px solid var(--border);
+  }
+  td { padding: 12px 12px; border-bottom: 1px solid var(--border); color: var(--text); vertical-align: middle; }
+  tr:last-child td { border-bottom: none; }
+  tbody tr:hover td { background: rgba(255,255,255,0.02); }
+
+  .name-cell { display: flex; align-items: center; gap: 10px; }
+  .av { width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 500; flex-shrink: 0; }
+
+  /* FORMS */
+  .form-row { display: flex; gap: 10px; margin-bottom: 10px; }
+  .form-row input, .form-row select {
+    flex: 1;
+    height: 38px;
+    padding: 0 12px;
+    border-radius: var(--radius);
+    border: 1px solid var(--border2);
+    background: var(--surface2);
+    color: var(--text);
+    font-family: var(--font);
+    font-size: 13px;
+  }
+  .form-row input:focus, .form-row select:focus { outline: none; border-color: var(--accent); }
+  .form-row input::placeholder { color: var(--text3); }
+  .form-row select option { background: var(--surface2); }
+
+  .btn {
+    padding: 0 16px;
+    height: 38px;
+    border-radius: var(--radius);
+    border: 1px solid var(--border2);
+    background: transparent;
+    color: var(--text2);
+    font-family: var(--font);
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.15s;
+    white-space: nowrap;
+  }
+  .btn:hover { color: var(--text); background: var(--surface2); }
+  .btn-primary {
+    background: var(--accent);
+    color: #000;
+    border-color: var(--accent);
+    font-weight: 500;
+  }
+  .btn-primary:hover { background: var(--accent2); border-color: var(--accent2); color: #000; }
+  .btn-sm { height: 28px; padding: 0 10px; font-size: 11px; }
+
+  /* QR */
+  .qr-modal {
+    display: none;
+    position: fixed; inset: 0; z-index: 100;
+    background: rgba(0,0,0,0.8);
+    align-items: center;
+    justify-content: center;
+  }
+  .qr-modal.open { display: flex; }
+  .qr-box {
+    background: var(--surface);
+    border: 1px solid var(--border2);
+    border-radius: var(--radius-lg);
+    padding: 28px;
+    text-align: center;
+    min-width: 260px;
+  }
+  .qr-box h3 { margin-bottom: 4px; }
+  .qr-box p { font-size: 12px; color: var(--text2); margin-bottom: 16px; }
+  #qr-render { display: flex; justify-content: center; margin-bottom: 16px; }
+  #qr-render canvas, #qr-render img { border-radius: 8px; }
+
+  /* TODAY LIST */
+  .today-entry {
+    display: flex; align-items: center; gap: 12px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border);
+    animation: slideIn 0.2s ease;
+  }
+  .today-entry:last-child { border-bottom: none; }
+
+  /* STATUS BAR */
+  .status-msg {
+    padding: 10px 14px;
+    border-radius: var(--radius);
+    font-size: 13px;
+    margin-bottom: 12px;
+    display: none;
+  }
+  .status-msg.show { display: block; }
+  .status-msg.ok { background: rgba(0,229,160,0.1); color: var(--accent); border: 1px solid rgba(0,229,160,0.2); }
+  .status-msg.err { background: rgba(255,77,77,0.1); color: var(--danger); border: 1px solid rgba(255,77,77,0.2); }
+
+  canvas { display: none; }
+
+  @media (max-width: 768px) {
+    .sidebar { display: none; }
+    .metrics { grid-template-columns: 1fr 1fr; }
+    .grid-2 { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<div class="app">
+  <!-- SIDEBAR -->
+  <div class="sidebar">
+    <div class="logo">
+      <div class="logo-title">AccesoQR</div>
+      <div class="logo-sub">Control de asistencia</div>
+    </div>
+    <div class="nav-item active" onclick="showPanel('scan')">
+      <span class="nav-icon">▦</span> Escanear QR
+    </div>
+    <div class="nav-item" onclick="showPanel('registro')">
+      <span class="nav-icon">☰</span> Registro
+    </div>
+    <div class="nav-item" onclick="showPanel('miembros')">
+      <span class="nav-icon">◎</span> Miembros
+    </div>
+    <div class="nav-item" onclick="showPanel('pagos')">
+      <span class="nav-icon">$</span> Pagos
+    </div>
+    <div class="sidebar-footer">Firebase conectado ●</div>
+  </div>
+
+  <!-- MAIN -->
+  <div class="main">
+    <div class="topbar">
+      <div class="topbar-title" id="panel-title">Escanear QR</div>
+      <div class="topbar-time" id="clock">--:--:--</div>
+    </div>
+
+    <div class="content">
+
+      <!-- PANEL SCAN -->
+      <div class="panel active" id="panel-scan">
+        <div class="metrics">
+          <div class="metric">
+            <div class="metric-label">Entradas hoy</div>
+            <div class="metric-value green" id="m-hoy">0</div>
+          </div>
+          <div class="metric">
+            <div class="metric-label">Miembros</div>
+            <div class="metric-value blue" id="m-total">0</div>
+          </div>
+          <div class="metric">
+            <div class="metric-label">Al corriente</div>
+            <div class="metric-value green" id="m-ok">0</div>
+          </div>
+          <div class="metric">
+            <div class="metric-label">Con adeudo</div>
+            <div class="metric-value red" id="m-adeudo">0</div>
+          </div>
+        </div>
+
+        <div class="grid-2">
+          <div class="card">
+            <div class="card-title">Cámara — Lector QR</div>
+            <div class="scanner-wrap">
+              <video id="preview" autoplay playsinline muted style="height:200px;object-fit:cover;"></video>
+              <canvas id="snap"></canvas>
+              <div class="scanner-overlay">
+                <div style="position:relative;">
+                  <div class="scan-frame"></div>
+                  <div class="scan-line"></div>
+                </div>
+              </div>
+            </div>
+            <button class="btn-scan" id="btn-cam" onclick="toggleCamera()">▶ Activar cámara</button>
+          </div>
+
+          <div class="card">
+            <div class="card-title">Último acceso</div>
+            <div id="last-entry" style="color:var(--text3);font-size:13px;text-align:center;padding:40px 0;">
+              Esperando escaneo...
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">Entradas del día</div>
+          <div id="today-list" style="color:var(--text3);font-size:13px;padding:10px 0;">Sin registros hoy.</div>
+        </div>
+      </div>
+
+      <!-- PANEL REGISTRO -->
+      <div class="panel" id="panel-registro">
+        <div class="card">
+          <div class="card-title">Historial completo de asistencias</div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>Miembro</th><th>Fecha</th><th>Hora</th><th>Plan</th><th>Pago</th></tr>
+              </thead>
+              <tbody id="hist-body">
+                <tr><td colspan="5" style="color:var(--text3);text-align:center;padding:24px;">Cargando...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- PANEL MIEMBROS -->
+      <div class="panel" id="panel-miembros">
+        <div class="card" style="margin-bottom:16px;">
+          <div class="card-title">Agregar miembro</div>
+          <div id="msg-member" class="status-msg"></div>
+          <div class="form-row">
+            <input type="text" id="new-nombre" placeholder="Nombre completo"/>
+            <input type="text" id="new-plan" placeholder="Plan (Mensual, Trimestral...)"/>
+          </div>
+          <div class="form-row">
+            <input type="date" id="new-inicio"/>
+            <input type="number" id="new-monto" placeholder="Monto mensualidad ($)"/>
+            <button class="btn btn-primary" onclick="addMember()">Agregar</button>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-title">Lista de miembros</div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>Nombre</th><th>Plan</th><th>Inicio</th><th>ID / QR</th><th>Estado</th><th></th></tr>
+              </thead>
+              <tbody id="members-body">
+                <tr><td colspan="6" style="color:var(--text3);text-align:center;padding:24px;">Cargando...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- PANEL PAGOS -->
+      <div class="panel" id="panel-pagos">
+        <div class="card" style="margin-bottom:16px;">
+          <div class="card-title">Registrar pago</div>
+          <div id="msg-pay" class="status-msg"></div>
+          <div class="form-row">
+            <select id="pay-member"><option value="">Seleccionar miembro...</option></select>
+            <input type="number" id="pay-amount" placeholder="Monto ($)"/>
+            <button class="btn btn-primary" onclick="registerPay()">Registrar pago</button>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-title">Estado de pagos</div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>Miembro</th><th>Plan</th><th>Último pago</th><th>Monto</th><th>Estado</th></tr>
+              </thead>
+              <tbody id="pay-body">
+                <tr><td colspan="5" style="color:var(--text3);text-align:center;padding:24px;">Cargando...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- QR MODAL -->
+<div class="qr-modal" id="qr-modal" onclick="closeQR(event)">
+  <div class="qr-box">
+    <h3 id="qr-name">Nombre</h3>
+    <p id="qr-id">ID</p>
+    <div id="qr-render"></div>
+    <button class="btn btn-primary" onclick="closeQRBtn()">Cerrar</button>
+  </div>
+</div>
+
+<!-- FIREBASE -->
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getFirestore, collection, addDoc, getDocs, doc, updateDoc, onSnapshot, query, orderBy, where, Timestamp }
+  from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyD4voHfDJIJnDQPRA5-jIbxQaukJnrKJf4",
+  authDomain: "control-de-acceso-4dd34.firebaseapp.com",
+  projectId: "control-de-acceso-4dd34",
+  storageBucket: "control-de-acceso-4dd34.firebasestorage.app",
+  messagingSenderId: "11907064297",
+  appId: "1:11907064297:web:7d2fbce993395b5515ab78",
+  measurementId: "G-758JTC2T9L"
+};
+
+const app = initializeApp(firebaseConfig);
+const db  = getFirestore(app);
+
+window._db = db;
+window._fs = { collection, addDoc, getDocs, doc, updateDoc, onSnapshot, query, orderBy, where, Timestamp };
+
+// ── CLOCK ──
+function updateClock(){
+  document.getElementById('clock').textContent =
+    new Date().toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+}
+setInterval(updateClock, 1000); updateClock();
+
+// ── COLORS ──
+const AV_COLORS = [
+  {bg:'rgba(0,229,160,0.15)',color:'#00e5a0'},
+  {bg:'rgba(77,158,255,0.15)',color:'#4d9eff'},
+  {bg:'rgba(255,179,64,0.15)',color:'#ffb340'},
+  {bg:'rgba(255,77,77,0.15)',color:'#ff4d4d'},
+  {bg:'rgba(200,100,255,0.15)',color:'#c864ff'},
+];
+function avColor(i){ return AV_COLORS[i % AV_COLORS.length]; }
+function initials(name){ return name.split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase(); }
+
+// ── MEMBERS (live) ──
+let members = [];
+let memberMap = {};
+
+onSnapshot(collection(db,'members'), snap => {
+  members = snap.docs.map(d => ({id: d.id, ...d.data()}));
+  memberMap = {};
+  members.forEach(m => memberMap[m.id] = m);
+  renderMembers();
+  renderPays();
+  populatePaySelect();
+  updateMetrics();
+});
+
+// ── ATTENDANCE (live) ──
+let attendance = [];
+onSnapshot(query(collection(db,'attendance'), orderBy('timestamp','desc')), snap => {
+  attendance = snap.docs.map(d => ({id: d.id, ...d.data()}));
+  renderHist();
+  renderTodayList();
+  updateMetrics();
+});
+
+// ── METRICS ──
+function updateMetrics(){
+  const today = todayStr();
+  const todayCount = attendance.filter(a => a.fecha === today).length;
+  document.getElementById('m-hoy').textContent   = todayCount;
+  document.getElementById('m-total').textContent = members.length;
+  document.getElementById('m-ok').textContent    = members.filter(m=>m.pagado).length;
+  document.getElementById('m-adeudo').textContent= members.filter(m=>!m.pagado).length;
+}
+
+function todayStr(){
+  return new Date().toLocaleDateString('es-MX',{day:'2-digit',month:'2-digit',year:'numeric'});
+}
+function nowStr(){
+  return new Date().toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+}
+
+// ── CAMERA ──
+let stream = null;
+let scanning = false;
+let animFrame = null;
+
+window.toggleCamera = async function(){
+  const btn = document.getElementById('btn-cam');
+  if(!scanning){
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}});
+      document.getElementById('preview').srcObject = stream;
+      scanning = true;
+      btn.textContent = '■ Detener cámara';
+      btn.classList.add('active');
+      scanLoop();
+    } catch(e){
+      alert('No se pudo acceder a la cámara. Verifica los permisos del navegador.');
+    }
+  } else {
+    stopCamera();
+  }
+};
+
+function stopCamera(){
+  scanning = false;
+  if(animFrame) cancelAnimationFrame(animFrame);
+  if(stream) stream.getTracks().forEach(t=>t.stop());
+  const btn = document.getElementById('btn-cam');
+  btn.textContent = '▶ Activar cámara';
+  btn.classList.remove('active');
+}
+
+function scanLoop(){
+  if(!scanning) return;
+  const video   = document.getElementById('preview');
+  const canvas  = document.getElementById('snap');
+  if(video.readyState === video.HAVE_ENOUGH_DATA){
+    canvas.width  = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(video, 0, 0);
+    const img = ctx.getImageData(0,0,canvas.width,canvas.height);
+    const code = jsQR(img.data, img.width, img.height, {inversionAttempts:'dontInvert'});
+    if(code){
+      const qrData = code.data.trim();
+      handleQRCode(qrData);
+      return;
+    }
+  }
+  animFrame = requestAnimationFrame(scanLoop);
+}
+
+// ── QR DECODE ──
+async function handleQRCode(data){
+  stopCamera();
+  // data = member Firestore ID
+  const m = memberMap[data];
+  if(!m){ showLastEntry(null, data); return; }
+  await registerAttendance(m, data);
+}
+
+async function registerAttendance(m, mid){
+  const fecha = todayStr();
+  const hora  = nowStr();
+  const { addDoc, collection, Timestamp } = window._fs;
+  await addDoc(collection(db,'attendance'),{
+    memberId: mid,
+    nombre:   m.nombre,
+    plan:     m.plan,
+    pagado:   m.pagado,
+    fecha,
+    hora,
+    timestamp: Timestamp.now()
+  });
+  showLastEntry(m, mid);
+}
+
+function showLastEntry(m, mid){
+  const el = document.getElementById('last-entry');
+  if(!m){
+    el.innerHTML = `<div style="color:var(--danger);padding:20px;">QR no reconocido: ${mid}</div>`;
+    return;
+  }
+  const idx = members.indexOf(m);
+  const {bg, color} = avColor(idx < 0 ? 0 : idx);
+  const badge = m.pagado
+    ? `<span class="badge badge-green"><span class="dot dot-green"></span>Al corriente</span>`
+    : `<span class="badge badge-red"><span class="dot dot-red"></span>Con adeudo</span>`;
+  el.innerHTML = `
+    <div class="entry-result">
+      <div class="entry-avatar" style="background:${bg};color:${color};">${initials(m.nombre)}</div>
+      <div class="entry-info">
+        <div class="entry-name">${m.nombre}</div>
+        <div class="entry-detail">Plan: ${m.plan} &bull; ID: ${mid.slice(0,8)}...</div>
+        <div style="margin-top:6px;">${badge}</div>
+      </div>
+      <div class="entry-time">${nowStr()}</div>
+    </div>`;
+}
+
+// ── TODAY LIST ──
+function renderTodayList(){
+  const today = todayStr();
+  const todayRecs = attendance.filter(a => a.fecha === today);
+  const el = document.getElementById('today-list');
+  if(!todayRecs.length){ el.innerHTML = '<span style="color:var(--text3);">Sin registros hoy.</span>'; return; }
+  el.innerHTML = todayRecs.map((a,i)=>{
+    const {bg,color} = avColor(i);
+    const badge = a.pagado
+      ? `<span class="badge badge-green" style="font-size:10px;">Al corriente</span>`
+      : `<span class="badge badge-red" style="font-size:10px;">Con adeudo</span>`;
+    return `<div class="today-entry">
+      <div class="av" style="background:${bg};color:${color};width:30px;height:30px;">${initials(a.nombre)}</div>
+      <div style="flex:1;">
+        <div style="font-weight:500;">${a.nombre}</div>
+        <div style="font-size:11px;color:var(--text3);">${a.plan}</div>
+      </div>
+      ${badge}
+      <div style="font-family:var(--mono);font-size:12px;color:var(--text2);">${a.hora}</div>
+    </div>`;
+  }).join('');
+}
+
+// ── HISTORIAL ──
+function renderHist(){
+  const el = document.getElementById('hist-body');
+  if(!attendance.length){ el.innerHTML='<tr><td colspan="5" style="color:var(--text3);text-align:center;padding:24px;">Sin registros.</td></tr>'; return; }
+  el.innerHTML = attendance.map((a,i)=>{
+    const {bg,color} = avColor(i % 5);
+    const badge = a.pagado
+      ? `<span class="badge badge-green">Al corriente</span>`
+      : `<span class="badge badge-red">Con adeudo</span>`;
+    return `<tr>
+      <td><div class="name-cell"><div class="av" style="background:${bg};color:${color};">${initials(a.nombre)}</div>${a.nombre}</div></td>
+      <td>${a.fecha}</td>
+      <td style="font-family:var(--mono);">${a.hora}</td>
+      <td>${a.plan}</td>
+      <td>${badge}</td>
+    </tr>`;
+  }).join('');
+}
+
+// ── MEMBERS ──
+function renderMembers(){
+  const el = document.getElementById('members-body');
+  if(!members.length){ el.innerHTML='<tr><td colspan="6" style="color:var(--text3);text-align:center;padding:24px;">Sin miembros.</td></tr>'; return; }
+  el.innerHTML = members.map((m,i)=>{
+    const {bg,color} = avColor(i);
+    const badge = m.pagado
+      ? `<span class="badge badge-green">Activo</span>`
+      : `<span class="badge badge-amber">Adeudo</span>`;
+    return `<tr>
+      <td><div class="name-cell"><div class="av" style="background:${bg};color:${color};">${initials(m.nombre)}</div>${m.nombre}</div></td>
+      <td>${m.plan}</td>
+      <td>${m.inicio}</td>
+      <td><span class="badge badge-blue" style="font-family:var(--mono);font-size:10px;">${m.id.slice(0,8)}</span></td>
+      <td>${badge}</td>
+      <td><button class="btn btn-sm" onclick="showQR('${m.id}')">Ver QR</button></td>
+    </tr>`;
+  }).join('');
+}
+
+window.addMember = async function(){
+  const nombre = document.getElementById('new-nombre').value.trim();
+  const plan   = document.getElementById('new-plan').value.trim();
+  const inicio = document.getElementById('new-inicio').value;
+  const monto  = parseFloat(document.getElementById('new-monto').value) || 0;
+  const msg    = document.getElementById('msg-member');
+  if(!nombre||!plan||!inicio){ showMsg(msg,'Completa todos los campos.','err'); return; }
+  const { addDoc, collection } = window._fs;
+  await addDoc(collection(db,'members'),{ nombre, plan, inicio, monto, pagado:false, ultimoPago:'—' });
+  document.getElementById('new-nombre').value='';
+  document.getElementById('new-plan').value='';
+  document.getElementById('new-inicio').value='';
+  document.getElementById('new-monto').value='';
+  showMsg(msg, `✓ ${nombre} agregado correctamente.`, 'ok');
+};
+
+// ── PAYS ──
+function populatePaySelect(){
+  const sel = document.getElementById('pay-member');
+  const cur = sel.value;
+  sel.innerHTML = '<option value="">Seleccionar miembro...</option>';
+  members.forEach(m => sel.innerHTML += `<option value="${m.id}">${m.nombre}</option>`);
+  if(cur) sel.value = cur;
+}
+
+function renderPays(){
+  const el = document.getElementById('pay-body');
+  if(!members.length){ el.innerHTML='<tr><td colspan="5" style="color:var(--text3);text-align:center;padding:24px;">Sin miembros.</td></tr>'; return; }
+  el.innerHTML = members.map((m,i)=>{
+    const {bg,color} = avColor(i);
+    const badge = m.pagado
+      ? `<span class="badge badge-green"><span class="dot dot-green"></span>Al corriente</span>`
+      : `<span class="badge badge-red"><span class="dot dot-red"></span>Con adeudo</span>`;
+    return `<tr>
+      <td><div class="name-cell"><div class="av" style="background:${bg};color:${color};">${initials(m.nombre)}</div>${m.nombre}</div></td>
+      <td>${m.plan}</td>
+      <td>${m.ultimoPago}</td>
+      <td>$${m.monto}</td>
+      <td>${badge}</td>
+    </tr>`;
+  }).join('');
+}
+
+window.registerPay = async function(){
+  const id     = document.getElementById('pay-member').value;
+  const monto  = parseFloat(document.getElementById('pay-amount').value);
+  const msg    = document.getElementById('msg-pay');
+  if(!id||!monto){ showMsg(msg,'Selecciona un miembro e ingresa el monto.','err'); return; }
+  const { doc, updateDoc } = window._fs;
+  await updateDoc(doc(db,'members',id),{
+    pagado: true,
+    ultimoPago: todayStr(),
+    monto
+  });
+  document.getElementById('pay-amount').value='';
+  document.getElementById('pay-member').value='';
+  showMsg(msg,'✓ Pago registrado correctamente.','ok');
+};
+
+// ── QR MODAL ──
+window.showQR = function(id){
+  const m = memberMap[id];
+  if(!m) return;
+  document.getElementById('qr-name').textContent = m.nombre;
+  document.getElementById('qr-id').textContent   = 'ID: ' + id;
+  const render = document.getElementById('qr-render');
+  render.innerHTML = '';
+  new QRCode(render,{ text: id, width:180, height:180, colorDark:'#000', colorLight:'#fff' });
+  document.getElementById('qr-modal').classList.add('open');
+};
+window.closeQR = function(e){ if(e.target === document.getElementById('qr-modal')) closeQRBtn(); };
+window.closeQRBtn = function(){ document.getElementById('qr-modal').classList.remove('open'); };
+
+// ── HELPERS ──
+function showMsg(el, txt, type){
+  el.textContent = txt;
+  el.className = `status-msg show ${type}`;
+  setTimeout(()=>el.classList.remove('show'), 3500);
+}
+
+// ── NAV ──
+const panelTitles = { scan:'Escanear QR', registro:'Registro de asistencias', miembros:'Miembros', pagos:'Pagos' };
+window.showPanel = function(id){
+  document.querySelectorAll('.nav-item').forEach((n,i)=>{
+    n.classList.toggle('active', ['scan','registro','miembros','pagos'][i]===id);
+  });
+  document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
+  document.getElementById('panel-'+id).classList.add('active');
+  document.getElementById('panel-title').textContent = panelTitles[id];
+  if(id !== 'scan') stopCamera();
+};
+
+</script>
+</body>
+</html>
